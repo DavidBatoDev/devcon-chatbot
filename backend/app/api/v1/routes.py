@@ -1,14 +1,8 @@
 from fastapi import APIRouter
-from pydantic import BaseModel
-from app.services.rag_engine import answer_query
+from app.api.v1.models import AskRequest, AskResponse
+from app.services.rag_engine import ask_with_rag
 
 router = APIRouter()
-
-class AskRequest(BaseModel):
-    query: str
-
-class AskResponse(BaseModel):
-    answer: str
 
 @router.get("/health")
 def health_check():
@@ -16,5 +10,5 @@ def health_check():
 
 @router.post("/ask", response_model=AskResponse)
 async def ask_question(request: AskRequest):
-    answer = await answer_query(request.query)
-    return AskResponse(answer=answer)
+    response = ask_with_rag(request.query)
+    return AskResponse(answer=response)

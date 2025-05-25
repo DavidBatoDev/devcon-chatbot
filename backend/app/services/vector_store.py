@@ -1,28 +1,43 @@
+
 import os
 import json
-from app.core.config import settings
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 class SimpleVectorStore:
-    def __init__(self):
-        self.docs = []
-        self.embeddings = []
+    def __init__(self, dir_path):
+        self.dir_path = dir_path
+        self.docs_path = os.path.join(dir_path, "docs.json")
+        self.emb_path = os.path.join(dir_path, "embeddings.json")
+        self._load()
 
-    def add(self, doc_id, content, embedding):
-        self.docs.append({"id": doc_id, "content": content})
-        self.embeddings.append(embedding)
+    def _load(self):
+        if os.path.exists(self.docs_path) and os.path.exists(self.emb_path):
+            with open(self.docs_path, "r", encoding="utf-8") as f:
+                self.docs = json.load(f)
+            with open(self.emb_path, "r", encoding="utf-8") as f:
+                self.embeddings = json.load(f)
+        else:
+            self.docs = []
+            self.embeddings = []
 
-    def save(self, path):
-        os.makedirs(path, exist_ok=True)
-        with open(os.path.join(path, "docs.json"), "w", encoding="utf-8") as f:
-            json.dump(self.docs, f, ensure_ascii=False, indent=2)
-        with open(os.path.join(path, "embeddings.json"), "w") as f:
-            json.dump(self.embeddings, f)
+    def similarity_search(self, query_embedding, top_k=3):
+        if not self.embeddings:
+            return []
+        sims = cosine_similarity([query_embedding], self.embeddings)[0]
+        top_indices = np.argsort(sims)[::-1][:top_k]
+        return [self.docs[i] for i in top_indices]
 
-def save_to_store(metadatas, vectors):
-    store = SimpleVectorStore()
-    for metadata, emb in zip(metadatas, vectors):
-        store.add(metadata["file_id"], metadata["file_name"], emb)
-    store.save(settings.RAG_INDEX_DIR) 
+def save_to_store(chunks, embeddings, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    docs_path = os.path.join(output_dir, "docs.json")
+    emb_path = os.path.join(output_dir, "embeddings.json")
+
+    with open(docs_path, "w", encoding="utf-8") as f:
+        json.dump(chunks, f, indent=2, ensure_ascii=False)
+    with open(emb_path, "w", encoding="utf-8") as f:
+        json.dump(embeddings, f)
 
 def load_from_store():
-    return SimpleVectorStore()
+    from app.core.config import settings
+    return SimpleVectorStore(settings.RAG_INDEX_DIR)

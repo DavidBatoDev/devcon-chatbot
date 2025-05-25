@@ -1,9 +1,7 @@
 from pydantic import BaseModel
-from typing import List
 
 class AskRequest(BaseModel):
-    question: str
+    query: str
 
 class AskResponse(BaseModel):
     answer: str
-    sources: List[str]

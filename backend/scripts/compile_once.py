@@ -2,6 +2,7 @@ from app.services.drive_loader import list_files
 from app.services.extractor import extract_text
 from app.services.embedder import embed_texts
 from app.services.vector_store import save_to_store
+from app.core.config import settings
 
 # Replace with your actual Google Drive folder ID
 FOLDER_ID = "1eocL8T8BH6EwnP5siOtDz3FG2CqGHveS"
@@ -25,7 +26,8 @@ for file in files:
         texts.append(content)
         metadatas.append({
             "file_id": file["id"],
-            "file_name": file["name"]
+            "file_name": file["name"],
+            "content": content  # Add this line
         })
         print(f"Extracted {len(content)} characters.")
     except Exception as e:
@@ -33,5 +35,5 @@ for file in files:
 
 print("Embedding and saving...")
 vectors = embed_texts(texts)
-save_to_store(metadatas, vectors)
+save_to_store(metadatas, vectors, settings.RAG_INDEX_DIR)
 print("✅ Compilation complete.")
