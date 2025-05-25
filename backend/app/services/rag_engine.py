@@ -1,43 +1,44 @@
 from app.services.vector_store import load_from_store
-from app.services.embedder import get_embedder
+from app.services.embedder import embed_texts
 from app.core.config import settings
-import google.generativeai as genai
+import openai
 
-# Configure Gemini API globally
-genai.configure(api_key=settings.GEMINI_API_KEY)
-
-# Initialize embedding and vector store
-ebd_model = get_embedder()
+# Initialize vector store
 vector_store = load_from_store()
-gemini = genai.GenerativeModel("gemini-pro")
 
 def retrieve_relevant_chunks(query: str, top_k: int = 3):
-    query_emb = ebd_model.encode(query).tolist()
-    results = vector_store.similarity_search(query_emb, top_k=top_k)
-    return results
+    query_emb = embed_texts([query])[0]
+    return vector_store.similarity_search(query_emb, top_k=top_k)
 
-def answer_question(query: str):
-    # Step 1: Retrieve relevant chunks
-    top_chunks = retrieve_relevant_chunks(query)
+def get_openai_response(query: str, context: str) -> str:
+    openai.api_key = settings.OPENAI_API_KEY
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful assistant answering questions based on internal DEVCON documents.",
+            },
+            {
+                "role": "user",
+                "content": f"{context}\n\nQuestion: {query}"
+            }
+        ],
+        temperature=0.2,
+        max_tokens=1024
+    )
+    return response.choices[0].message["content"]
 
-    if not top_chunks:
-        return "Sorry, I couldn’t find relevant information."
+def ask_with_rag(query: str) -> str:
+    chunks = retrieve_relevant_chunks(query)
 
-    # Step 2: Format context
-    context = "\n\n".join([chunk["text"] for chunk in top_chunks])
+    if not chunks:
+        return "Sorry, I couldn’t find relevant information from the documents."
 
-    # Step 3: Generate answer with Gemini
-    prompt = f"""
-    You are a helpful assistant that answers questions based on internal DevCon documentation.
-
-    Context:
-    {context}
-
-    Question:
-    {query}
-
-    Answer:
-    """
-
-    response = gemini.generate_content(prompt)
-    return response.text.strip()
+    # Use only 'text' or 'content' fields, avoid overloading OpenAI token limits
+    context = "\n\n".join([chunk.get("text") or chunk.get("content", "") for chunk in chunks])
+    
+    # Truncate to ~48,000 characters (~12k tokens) to avoid 16k token ceiling
+    context = context[:48000]
+    
+    return get_openai_response(query, context).strip()
